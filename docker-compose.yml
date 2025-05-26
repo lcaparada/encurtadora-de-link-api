@@ -13,6 +13,13 @@ services:
     volumes:
       - mysql-volume:/var/lib/mysql
 
+  redis:
+    image: redis:7
+    container_name: my-redis
+    restart: always
+    ports:
+      - '6379:6379'
+
   api:
     build:
       context: .
@@ -23,6 +30,7 @@ services:
       - '3001:3001'
     depends_on:
       - db
+      - redis
     env_file:
       - .env
 

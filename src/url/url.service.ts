@@ -9,6 +9,7 @@ import { db } from 'src/drizzle/db';
 import { links } from 'src/drizzle/schema';
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { generateSlug } from 'src/utils/generateSlug';
+import { redis } from 'src/redis';
 
 const URL_EXPIRES_AT = Number(process.env.URL_EXPIRES_AT ?? 86400);
 
@@ -42,6 +43,16 @@ export class UrlService {
   }
 
   async redirect(urlCode: string) {
+    const cached = await redis.get(`shortlink:${urlCode}`);
+
+    if (cached) {
+      await db
+        .update(links)
+        .set({ accessCount: sql.raw('access_count + 1') })
+        .where(eq(links.urlCode, urlCode));
+      return cached;
+    }
+
     const now = new Date();
 
     const url = await db
@@ -57,6 +68,8 @@ export class UrlService {
       .update(links)
       .set({ accessCount: sql.raw('access_count + 1') })
       .where(eq(links.urlCode, urlCode));
+
+    await redis.set(`shortlink:${urlCode}`, url[0].originalUrl, 'EX', 3600);
 
     return url[0].originalUrl;
   }

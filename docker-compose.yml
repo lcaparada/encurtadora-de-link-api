@@ -1,0 +1,31 @@
+services:
+  db:
+    image: mysql/mysql-server:latest
+    container_name: my-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 'pass'
+      MYSQL_DATABASE: 'db'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'pass'
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql-volume:/var/lib/mysql
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shortener-api
+    restart: always
+    ports:
+      - '3001:3001'
+    depends_on:
+      - db
+    env_file:
+      - .env
+
+volumes:
+  mysql-volume:
+    driver: local

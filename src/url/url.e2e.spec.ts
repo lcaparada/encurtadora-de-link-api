@@ -28,6 +28,20 @@ describe('UrlController (e2e)', () => {
       }
       return null;
     },
+    getUrlsWithBusiestPeriodByIp: () => {
+      return {
+        urls: [
+          {
+            id: 1,
+            originalUrl: 'https://example.com',
+            shortUrl: 'http://localhost:3001/url/abc123',
+            expiresAt: '2025-05-28T01:46:39.000Z',
+            accessCount: 3,
+          },
+        ],
+        periodBusiest: 'Manhã',
+      };
+    },
   };
 
   beforeAll(async () => {
@@ -67,6 +81,37 @@ describe('UrlController (e2e)', () => {
       .expect(400);
 
     expect(response.body.message).toBe('Esse texto deve ser uma url válida.');
+  });
+
+  it('GET /url returns urls and periodBusiest', async () => {
+    urlService.getUrlsWithBusiestPeriodByIp = jest.fn().mockResolvedValue({
+      urls: [
+        {
+          id: 1,
+          originalUrl: 'https://example.com',
+          shortUrl: 'http://localhost:3001/url/abc123',
+          expiresAt: '2025-05-28T01:46:39.000Z',
+          accessCount: 3,
+        },
+      ],
+      periodBusiest: 'Manhã',
+    });
+
+    const response = await request(app.getHttpServer()).get('/url').expect(200);
+
+    expect(response.body).toEqual({
+      urls: [
+        {
+          id: 1,
+          originalUrl: 'https://example.com',
+          shortUrl: 'http://localhost:3001/url/abc123',
+          expiresAt: '2025-05-28T01:46:39.000Z',
+          accessCount: 3,
+        },
+      ],
+      periodBusiest: 'Manhã',
+    });
+    expect(urlService.getUrlsWithBusiestPeriodByIp).toHaveBeenCalled();
   });
 
   it('/url/short-url (POST) with missing url returns 400', async () => {
@@ -112,10 +157,6 @@ describe('UrlController (e2e)', () => {
     expect(response.body.message).toBe('Link não encontrado ou expirado');
   });
 
-  it('GET /url/:urlCode with no code returns 404', async () => {
-    await request(app.getHttpServer()).get('/url/').expect(404);
-  });
-
   it('POST /url/short-url with non-string url returns 400', async () => {
     const response = await request(app.getHttpServer())
       .post('/url/short-url')
@@ -123,5 +164,23 @@ describe('UrlController (e2e)', () => {
       .expect(400);
 
     expect(response.body.message).toBe('Esse texto deve ser uma url válida.');
+  });
+
+  it('GET /url returns urls and periodBusiest', async () => {
+    const response = await request(app.getHttpServer()).get('/url').expect(200);
+
+    expect(response.body).toEqual({
+      urls: [
+        {
+          id: 1,
+          originalUrl: 'https://example.com',
+          shortUrl: 'http://localhost:3001/url/abc123',
+          expiresAt: '2025-05-28T01:46:39.000Z',
+          accessCount: 3,
+        },
+      ],
+      periodBusiest: 'Manhã',
+    });
+    expect(urlService.getUrlsWithBusiestPeriodByIp).toHaveBeenCalled();
   });
 });

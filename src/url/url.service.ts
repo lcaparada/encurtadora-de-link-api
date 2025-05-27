@@ -14,11 +14,6 @@ import Redis from 'ioredis';
 
 const URL_EXPIRES_AT = Number(process.env.URL_EXPIRES_AT ?? 86400);
 
-type RedisShortlinkCache = {
-  originalUrl: string;
-  expiresAt: string;
-};
-
 @Injectable()
 export class UrlService {
   constructor(
@@ -53,25 +48,6 @@ export class UrlService {
   }
 
   async redirect(urlCode: string) {
-    const cached = (await this.redis.hgetall(
-      `shortlink:${urlCode}`,
-    )) as RedisShortlinkCache;
-
-    if (cached && cached.originalUrl && cached.expiresAt) {
-      const expiresAt = new Date(cached.expiresAt);
-      const now = new Date();
-      if (expiresAt > now) {
-        await this.sqlDB
-          .update(links)
-          .set({ accessCount: sql.raw('access_count + 1') })
-          .where(eq(links.urlCode, urlCode));
-        return cached.originalUrl;
-      } else {
-        // Remove do cache se expirado
-        await this.redis.del(`shortlink:${urlCode}`);
-      }
-    }
-
     const now = new Date();
 
     const url = await this.sqlDB
@@ -92,19 +68,6 @@ export class UrlService {
       linkId: url[0].id,
       accessedAt: new Date(),
     });
-
-    await this.redis.hmset(
-      `shortlink:${urlCode}`,
-      'originalUrl',
-      url[0].originalUrl,
-      'expiresAt',
-      url[0].expiresAt.toISOString(),
-    );
-
-    const ttl = Math.floor((url[0].expiresAt.getTime() - now.getTime()) / 1000);
-    if (ttl > 0) {
-      await this.redis.expire(`shortlink:${urlCode}`, ttl);
-    }
 
     return url[0].originalUrl;
   }
@@ -154,6 +117,13 @@ export class UrlService {
   }
 
   async checkIfUrlIsRegistered(originalUrl: string) {
+    const cacheKey = `registered-url:${originalUrl}`;
+    const cached = await this.redis.get(cacheKey);
+
+    if (cached === '1') {
+      throw new BadRequestException('Essa URL já está cadastrada');
+    }
+
     const result = await this.sqlDB
       .select()
       .from(links)
@@ -161,17 +131,31 @@ export class UrlService {
       .then((rows) => rows[0] ?? null);
 
     if (result) {
+      await this.redis.set(cacheKey, '1', 'EX', 3600);
       throw new BadRequestException('Essa URL já está cadastrada');
+    } else {
+      await this.redis.set(cacheKey, '0', 'EX', 300);
     }
   }
 
   async verifyIfIpCreateFiveUrlsOrMore(ip: string) {
-    const existingCount = await this.sqlDB
+    const cacheKey = `ip-url-count:${ip}`;
+    const cached = await this.redis.get(cacheKey);
+
+    if (cached && Number(cached) >= 5) {
+      throw new BadRequestException('Limite de 5 URLs por IP atingido');
+    }
+
+    const existingCountResult = await this.sqlDB
       .select({ count: sql<number>`COUNT(*)` })
       .from(links)
       .where(eq(links.ip, ip));
 
-    if (existingCount[0].count >= 5) {
+    const count = existingCountResult[0]?.count ?? 0;
+
+    await this.redis.set(cacheKey, count.toString(), 'EX', 300);
+
+    if (count >= 5) {
       throw new BadRequestException('Limite de 5 URLs por IP atingido');
     }
   }

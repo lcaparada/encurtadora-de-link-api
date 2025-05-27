@@ -7,8 +7,8 @@ import {
 import { ShortenURLDto } from './dtos/url.dto';
 import { isURL } from 'class-validator';
 import { db } from '../drizzle/db';
-import { links } from '../drizzle/schema';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { linkAccesses, links } from '../drizzle/schema';
+import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import { generateSlug } from '../utils/generateSlug';
 import Redis from 'ioredis';
 
@@ -88,6 +88,11 @@ export class UrlService {
       .set({ accessCount: sql.raw('access_count + 1') })
       .where(eq(links.urlCode, urlCode));
 
+    await this.sqlDB.insert(linkAccesses).values({
+      linkId: url[0].id,
+      accessedAt: new Date(),
+    });
+
     await this.redis.hmset(
       `shortlink:${urlCode}`,
       'originalUrl',
@@ -102,6 +107,50 @@ export class UrlService {
     }
 
     return url[0].originalUrl;
+  }
+
+  async getUrlsWithBusiestPeriodByIp(ip: string) {
+    const urls = await this.sqlDB
+      .select({
+        id: links.id,
+        originalUrl: links.originalUrl,
+        shortUrl: links.shortUrl,
+        expiresAt: links.expiresAt,
+        accessCount: links.accessCount,
+      })
+      .from(links)
+      .where(eq(links.ip, ip));
+
+    const urlIds = urls.map((u) => u.id);
+
+    let periodBusiest = null;
+    if (urlIds.length > 0) {
+      const periodCase = sql<string>`
+      CASE
+        WHEN HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) >= 6 AND HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) < 12 THEN 'Manhã'
+        WHEN HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) >= 12 AND HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) < 18 THEN 'Tarde'
+        WHEN HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) >= 18 AND HOUR(CONVERT_TZ(accessed_at, '+00:00', '-03:00')) < 24 THEN 'Noite'
+        ELSE 'Madrugada'
+      END
+    `;
+      const [busiest] = await this.sqlDB
+        .select({
+          period: periodCase,
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(linkAccesses)
+        .where(inArray(linkAccesses.linkId, urlIds))
+        .groupBy(periodCase)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(1);
+
+      periodBusiest = busiest?.period ?? null;
+    }
+
+    return {
+      urls,
+      periodBusiest,
+    };
   }
 
   async checkIfUrlIsRegistered(originalUrl: string) {

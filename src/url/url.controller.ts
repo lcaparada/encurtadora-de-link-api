@@ -54,4 +54,17 @@ export class UrlController {
         .json(error.response);
     }
   }
+
+  @Get()
+  async getUrlsFromIp(@Ip() ip: string, @Res() response: Response) {
+    try {
+      const result = await this.urlService.getUrlsWithBusiestPeriodByIp(ip);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      this.logger.log(`Error while getting urls: ${JSON.stringify(error)}`);
+      return response
+        .status(error.status ?? HttpStatus.INTERNAL_SERVER_ERROR)
+        .json(error.response);
+    }
+  }
 }

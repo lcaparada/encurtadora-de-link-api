@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Ip,
   Logger,
+  NotFoundException,
   Param,
   Post,
   Res,
@@ -43,6 +44,9 @@ export class UrlController {
   @Get('/:urlCode')
   async redirect(@Param('urlCode') urlCode: string, @Res() response: Response) {
     try {
+      if (!urlCode) {
+        throw new NotFoundException('Link não encontrado ou expirado');
+      }
       const originalUrl = await this.urlService.redirect(urlCode);
       return response.redirect(originalUrl);
     } catch (error) {

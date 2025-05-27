@@ -33,6 +33,7 @@ services:
       - redis
     env_file:
       - .env
+    command: sh -c "npx drizzle-kit migrate && npm run start:prod"
 
 volumes:
   mysql-volume:

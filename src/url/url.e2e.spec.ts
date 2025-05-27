@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, NotFoundException } from '@nestjs/common';
+import {
+  INestApplication,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import * as request from 'supertest';
 import { UrlModule } from './url.module';
 import { UrlService } from './url.service';
@@ -8,13 +12,19 @@ describe('UrlController (e2e)', () => {
   let app: INestApplication;
 
   const urlService = {
-    shortenUrl: () => {
+    shortenUrl: ({ originalUrl }: { originalUrl: string }) => {
+      if (!originalUrl || typeof originalUrl !== 'string') {
+        throw new BadRequestException('Esse texto deve ser uma url válida.');
+      }
+      if (!/^https?:\/\/.+\..+/.test(originalUrl)) {
+        throw new BadRequestException('Esse texto deve ser uma url válida.');
+      }
       return { shortUrl: `${process.env.BASE_URL}/H23SC` };
     },
     redirect: (urlCode: string) => {
       if (urlCode === 'H23SC') return 'https://example.com';
       if (urlCode === 'EXPIRED' || urlCode === 'NONEXISTENT') {
-        throw new NotFoundException('Link not found or expired');
+        throw new NotFoundException('Link não encontrado ou expirado');
       }
       return null;
     },
@@ -40,7 +50,7 @@ describe('UrlController (e2e)', () => {
     await app.close();
   });
 
-  it('/url/short-url (POST)', async () => {
+  it('/url/short-url (POST) should return a short url', async () => {
     return request(app.getHttpServer())
       .post('/url/short-url')
       .send({ originalUrl: 'https://example.com' })
@@ -49,7 +59,26 @@ describe('UrlController (e2e)', () => {
         shortUrl: `${process.env.BASE_URL}/H23SC`,
       });
   });
-  it('/url/:urlCode (GET)', async () => {
+
+  it('/url/short-url (POST) with invalid url returns 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/url/short-url')
+      .send({ originalUrl: 'invalid-url' })
+      .expect(400);
+
+    expect(response.body.message).toBe('Esse texto deve ser uma url válida.');
+  });
+
+  it('/url/short-url (POST) with missing url returns 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/url/short-url')
+      .send({})
+      .expect(400);
+
+    expect(response.body.message).toBe('Esse texto deve ser uma url válida.');
+  });
+
+  it('/url/:urlCode (GET) should redirect to original url', async () => {
     const { body } = await request(app.getHttpServer())
       .post('/url/short-url')
       .send({ originalUrl: 'https://example.com' })
@@ -70,7 +99,7 @@ describe('UrlController (e2e)', () => {
       .get('/url/NONEXISTENT')
       .expect(404);
 
-    expect(response.body.message).toBe('Link not found or expired');
+    expect(response.body.message).toBe('Link não encontrado ou expirado');
   });
 
   it('GET /url/:urlCode with an expired link returns 404', async () => {
@@ -80,6 +109,19 @@ describe('UrlController (e2e)', () => {
       .get(`/url/${expiredCode}`)
       .expect(404);
 
-    expect(response.body.message).toBe('Link not found or expired');
+    expect(response.body.message).toBe('Link não encontrado ou expirado');
+  });
+
+  it('GET /url/:urlCode with no code returns 404', async () => {
+    await request(app.getHttpServer()).get('/url/').expect(404);
+  });
+
+  it('POST /url/short-url with non-string url returns 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/url/short-url')
+      .send({ originalUrl: 12345 })
+      .expect(400);
+
+    expect(response.body.message).toBe('Esse texto deve ser uma url válida.');
   });
 });

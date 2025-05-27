@@ -4,6 +4,7 @@ import {
   Get,
   HttpStatus,
   Ip,
+  Logger,
   Param,
   Post,
   Res,
@@ -14,6 +15,8 @@ import { ShortenURLDto } from './dtos/url.dto';
 
 @Controller('url')
 export class UrlController {
+  private readonly logger = new Logger(UrlController.name);
+
   constructor(private readonly urlService: UrlService) {}
 
   @Post('/short-url')
@@ -22,16 +25,33 @@ export class UrlController {
     @Ip() ip: string,
     @Res() response: Response,
   ) {
-    const result = await this.urlService.shortenUrl({
-      originalUrl: body.originalUrl,
-      ip,
-    });
-    return response.status(HttpStatus.OK).json(result);
+    try {
+      const result = await this.urlService.shortenUrl({
+        originalUrl: body.originalUrl,
+        ip,
+      });
+
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      this.logger.log(`Error while trying short url: ${JSON.stringify(error)}`);
+      return response
+        .status(error.status ?? HttpStatus.INTERNAL_SERVER_ERROR)
+        .json(error.response);
+    }
   }
 
   @Get('/:urlCode')
-  async redirect(@Param('urlCode') urlCode: string, @Res() res: Response) {
-    const originalUrl = await this.urlService.redirect(urlCode);
-    return res.redirect(originalUrl);
+  async redirect(@Param('urlCode') urlCode: string, @Res() response: Response) {
+    try {
+      const originalUrl = await this.urlService.redirect(urlCode);
+      return response.redirect(originalUrl);
+    } catch (error) {
+      this.logger.log(
+        `Error while trying redirect to original url: ${JSON.stringify(error)}`,
+      );
+      return response
+        .status(error.status ?? HttpStatus.INTERNAL_SERVER_ERROR)
+        .json(error.response);
+    }
   }
 }

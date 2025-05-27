@@ -4,10 +4,10 @@ import { db } from './db';
 @Module({
   providers: [
     {
-      provide: 'DRIZZLE',
+      provide: 'db',
       useValue: db,
     },
   ],
-  exports: ['DRIZZLE'],
+  exports: ['db'],
 })
 export class DrizzleModule {}

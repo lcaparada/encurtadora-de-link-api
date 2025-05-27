@@ -10,7 +10,6 @@ import { db } from '../drizzle/db';
 import { links } from '../drizzle/schema';
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { generateSlug } from '../utils/generateSlug';
-import { redis } from '../redis/redis';
 import Redis from 'ioredis';
 
 const URL_EXPIRES_AT = Number(process.env.URL_EXPIRES_AT ?? 86400);
@@ -75,7 +74,12 @@ export class UrlService {
       .set({ accessCount: sql.raw('access_count + 1') })
       .where(eq(links.urlCode, urlCode));
 
-    await redis.set(`shortlink:${urlCode}`, url[0].originalUrl, 'EX', 3600);
+    await this.redis.set(
+      `shortlink:${urlCode}`,
+      url[0].originalUrl,
+      'EX',
+      3600,
+    );
 
     return url[0].originalUrl;
   }

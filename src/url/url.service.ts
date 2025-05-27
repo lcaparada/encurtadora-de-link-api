@@ -14,6 +14,11 @@ import Redis from 'ioredis';
 
 const URL_EXPIRES_AT = Number(process.env.URL_EXPIRES_AT ?? 86400);
 
+type RedisShortlinkCache = {
+  originalUrl: string;
+  expiresAt: string;
+};
+
 @Injectable()
 export class UrlService {
   constructor(
@@ -48,14 +53,23 @@ export class UrlService {
   }
 
   async redirect(urlCode: string) {
-    const cached = await this.redis.get(`shortlink:${urlCode}`);
+    const cached = (await this.redis.hgetall(
+      `shortlink:${urlCode}`,
+    )) as RedisShortlinkCache;
 
-    if (cached) {
-      await this.sqlDB
-        .update(links)
-        .set({ accessCount: sql.raw('access_count + 1') })
-        .where(eq(links.urlCode, urlCode));
-      return cached;
+    if (cached && cached.originalUrl && cached.expiresAt) {
+      const expiresAt = new Date(cached.expiresAt);
+      const now = new Date();
+      if (expiresAt > now) {
+        await this.sqlDB
+          .update(links)
+          .set({ accessCount: sql.raw('access_count + 1') })
+          .where(eq(links.urlCode, urlCode));
+        return cached.originalUrl;
+      } else {
+        // Remove do cache se expirado
+        await this.redis.del(`shortlink:${urlCode}`);
+      }
     }
 
     const now = new Date();
@@ -74,12 +88,18 @@ export class UrlService {
       .set({ accessCount: sql.raw('access_count + 1') })
       .where(eq(links.urlCode, urlCode));
 
-    await this.redis.set(
+    await this.redis.hmset(
       `shortlink:${urlCode}`,
+      'originalUrl',
       url[0].originalUrl,
-      'EX',
-      3600,
+      'expiresAt',
+      url[0].expiresAt.toISOString(),
     );
+
+    const ttl = Math.floor((url[0].expiresAt.getTime() - now.getTime()) / 1000);
+    if (ttl > 0) {
+      await this.redis.expire(`shortlink:${urlCode}`, ttl);
+    }
 
     return url[0].originalUrl;
   }

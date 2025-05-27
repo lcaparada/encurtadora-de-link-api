@@ -1,20 +1,26 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ShortenURLDto } from './dtos/url.dto';
 import { isURL } from 'class-validator';
-import { db } from 'src/drizzle/db';
-import { links } from 'src/drizzle/schema';
+import { db } from '../drizzle/db';
+import { links } from '../drizzle/schema';
 import { and, eq, gt, sql } from 'drizzle-orm';
-import { generateSlug } from 'src/utils/generateSlug';
-import { redis } from 'src/redis';
+import { generateSlug } from '../utils/generateSlug';
+import { redis } from '../redis/redis';
+import Redis from 'ioredis';
 
 const URL_EXPIRES_AT = Number(process.env.URL_EXPIRES_AT ?? 86400);
 
 @Injectable()
 export class UrlService {
+  constructor(
+    @Inject('db') private readonly sqlDB: typeof db,
+    @Inject('redis') private readonly redis: Redis,
+  ) {}
   async shortenUrl({ originalUrl, ip }: ShortenURLDto & { ip: string }) {
     if (!isURL(originalUrl)) {
       throw new BadRequestException('Esse texto deve ser uma url válida.');
@@ -31,7 +37,7 @@ export class UrlService {
 
     const shortUrl = `${baseUrl}/${urlCode}`;
 
-    await db.insert(links).values({
+    await this.sqlDB.insert(links).values({
       urlCode,
       shortUrl,
       originalUrl,
@@ -39,14 +45,14 @@ export class UrlService {
       expiresAt,
     });
 
-    return shortUrl;
+    return { shortUrl };
   }
 
   async redirect(urlCode: string) {
-    const cached = await redis.get(`shortlink:${urlCode}`);
+    const cached = await this.redis.get(`shortlink:${urlCode}`);
 
     if (cached) {
-      await db
+      await this.sqlDB
         .update(links)
         .set({ accessCount: sql.raw('access_count + 1') })
         .where(eq(links.urlCode, urlCode));
@@ -55,7 +61,7 @@ export class UrlService {
 
     const now = new Date();
 
-    const url = await db
+    const url = await this.sqlDB
       .select()
       .from(links)
       .where(and(eq(links.urlCode, urlCode), gt(links.expiresAt, now)));
@@ -64,7 +70,7 @@ export class UrlService {
       throw new NotFoundException('Link não encontrado ou expirado');
     }
 
-    await db
+    await this.sqlDB
       .update(links)
       .set({ accessCount: sql.raw('access_count + 1') })
       .where(eq(links.urlCode, urlCode));
@@ -74,8 +80,8 @@ export class UrlService {
     return url[0].originalUrl;
   }
 
-  private async checkIfUrlIsRegistered(originalUrl: string) {
-    const result = await db
+  async checkIfUrlIsRegistered(originalUrl: string) {
+    const result = await this.sqlDB
       .select()
       .from(links)
       .where(eq(links.originalUrl, originalUrl))
@@ -86,8 +92,8 @@ export class UrlService {
     }
   }
 
-  private async verifyIfIpCreateFiveUrlsOrMore(ip: string) {
-    const existingCount = await db
+  async verifyIfIpCreateFiveUrlsOrMore(ip: string) {
+    const existingCount = await this.sqlDB
       .select({ count: sql<number>`COUNT(*)` })
       .from(links)
       .where(eq(links.ip, ip));
@@ -97,9 +103,9 @@ export class UrlService {
     }
   }
 
-  private async generateUniqueSlug(): Promise<string> {
+  async generateUniqueSlug(): Promise<string> {
     let slug = generateSlug();
-    let exists = await db
+    let exists = await this.sqlDB
       .select()
       .from(links)
       .where(eq(links.urlCode, slug))
@@ -107,7 +113,7 @@ export class UrlService {
 
     while (exists.length > 0) {
       slug = generateSlug();
-      exists = await db
+      exists = await this.sqlDB
         .select()
         .from(links)
         .where(eq(links.urlCode, slug))

@@ -34,7 +34,7 @@ export class UrlService {
 
     const baseUrl = process.env.BASE_URL ?? 'http://localhost:3001';
 
-    const shortUrl = `${baseUrl}/${urlCode}`;
+    const shortUrl = `${baseUrl}/url/${urlCode}`;
 
     await this.sqlDB.insert(links).values({
       urlCode,

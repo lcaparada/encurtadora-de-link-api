@@ -26,6 +26,10 @@ describe('UrlController (e2e)', () => {
     })
       .overrideProvider(UrlService)
       .useValue(urlService)
+      .overrideProvider('db')
+      .useValue({})
+      .overrideProvider('redis')
+      .useValue({})
       .compile();
 
     app = moduleRef.createNestApplication();

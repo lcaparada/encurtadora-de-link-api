@@ -1,4 +1,5 @@
 import {
+  bigint,
   int,
   mysqlTable,
   serial,
@@ -15,4 +16,10 @@ export const links = mysqlTable('links', {
   expiresAt: timestamp('expires_at').notNull(),
   accessCount: int('access_count').default(0),
   ip: varchar('ip', { length: 45 }).notNull(),
+});
+
+export const linkAccesses = mysqlTable('link_accesses', {
+  id: serial('id').primaryKey(),
+  linkId: bigint('link_id', { mode: 'number' }).notNull(),
+  accessedAt: timestamp('accessed_at').defaultNow().notNull(),
 });

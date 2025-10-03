@@ -22,8 +22,4 @@ Além de encurtar, o sistema oferece estatísticas de acesso, tornando-se uma so
 
 - Banco de dados: MySQL
 
-- Frontend (opcional): React / Next.js
-
-- Autenticação: JWT
-
 - Outras libs: UUID, date-fns

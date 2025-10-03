@@ -20,7 +20,7 @@ Além de encurtar, o sistema oferece estatísticas de acesso, tornando-se uma so
 
 - Backend: Node.js + Express
 
-- Banco de dados: PostgreSQL / MongoDB (dependendo da implementação)
+- Banco de dados: MySQL
 
 - Frontend (opcional): React / Next.js
 
